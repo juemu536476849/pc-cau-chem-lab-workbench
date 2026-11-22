@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+runtime/
+outputs/*.xlsx
+outputs/*.docx
+*.log
+.DS_Store
+Thumbs.db
+*.zip

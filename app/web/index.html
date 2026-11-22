@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>物化 / 化工实验数据处理工作台</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230ea5a4'/%3E%3Cpath d='M11 8h10M13 8v6l-5 9a2 2 0 0 0 1.8 3h12.4A2 2 0 0 0 24 23l-5-9V8' fill='none' stroke='white' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 3h6M10 3v6.2L4.8 18a2 2 0 0 0 1.7 3h11a2 2 0 0 0 1.7-3L14 9.2V3"/><path d="M7.5 15h9"/></svg>
+      </div>
+      <div class="brand-text">
+        <b>实验数据处理工作台</b>
+        <span>物理化学 · 化工原理</span>
+      </div>
+    </div>
+
+    <div class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="search" type="search" placeholder="搜索实验 / 编号…" autocomplete="off">
+    </div>
+
+    <nav id="nav" class="nav"></nav>
+
+    <div class="sidebar-foot">
+      <div class="stat"><span id="stat-count">—</span> 个实验模块</div>
+      <div class="hint">数据仅在本地浏览器与本机 Python 之间传递</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <section class="home" id="home" hidden>
+      <div class="home-hero">
+        <div class="hero-eyebrow">Physical Chemistry · Chemical Engineering</div>
+        <h1>把实验数据，<em>一键算完</em></h1>
+        <p>选实验 → 粘贴数据 → 点运行，图表、结果表和 Excel 一次到手。原始数据与历史报告都已随实验归档。</p>
+        <div class="hero-stats" id="hero-stats"></div>
+      </div>
+      <div class="home-grid" id="home-grid"></div>
+      <div class="home-foot">全部计算在本机完成，数据不上传 · 第一次打开会自动准备运行环境（约 3 分钟，只需一次）· 结果可导出 Excel，图可导出 SVG</div>
+    </section>
+
+    <header class="topbar">
+      <div class="title-block">
+        <div class="eyebrow" id="eyebrow">物化实验</div>
+        <h1><span class="code-chip" id="code">A1</span><span id="name">加载中…</span></h1>
+        <p class="subtitle" id="subtitle"></p>
+      </div>
+      <div class="toolbar">
+        <button id="btn-run" class="btn primary" title="运行计算（Ctrl+Enter）">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13a1 1 0 0 0 1.5.9l10-6.5a1 1 0 0 0 0-1.7l-10-6.5A1 1 0 0 0 8 5.5Z"/></svg>
+          运行计算 <kbd>Ctrl ↵</kbd>
+        </button>
+        <button id="btn-export" class="btn ghost" title="把参数、数据与结果导出为 Excel">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+          导出 Excel
+        </button>
+        <button id="btn-docx" class="btn ghost" title="生成 Word 实验报告：首次导出时选一个文件夹，之后自动存进去；按住 Shift 点击可更换文件夹">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M8.5 12.5l1.2 5 1.8-3.6 1.8 3.6 1.2-5"/></svg>
+          导出 Word
+        </button>
+        <button id="btn-reset" class="btn ghost" title="恢复示例数据与默认参数">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+          复位
+        </button>
+      </div>
+    </header>
+
+    <div class="scroll">
+      <div class="tags" id="tags"></div>
+      <div class="steps">
+        <span class="step"><i>1</i>核对 / 粘贴数据</span><span class="arrow">→</span>
+        <span class="step"><i>2</i>按需调参数</span><span class="arrow">→</span>
+        <span class="step"><i>3</i>运行计算 · 导出</span>
+      </div>
+      <div class="layout">
+        <!-- 左：输入 -->
+        <section class="col input-col">
+          <div class="col-head">
+            <h2>输入</h2>
+            <span class="col-tip">可直接从 Excel 复制粘贴到表格</span>
+          </div>
+          <div id="params" class="params"></div>
+          <div id="tables-input" class="tables"></div>
+
+          <div class="card material-card">
+            <div class="card-head">
+              <h3>原始资料</h3>
+              <button id="btn-folder" class="link-btn">打开文件夹 ↗</button>
+            </div>
+            <div id="materials" class="materials"><div class="muted">加载中…</div></div>
+          </div>
+
+          <details class="card method-card">
+            <summary><span>计算方法</span><em>想看再展开</em></summary>
+            <ol id="method" class="method"></ol>
+            <p id="desc" class="desc"></p>
+          </details>
+        </section>
+
+        <!-- 右：结果 -->
+        <section class="col output-col">
+          <div class="col-head">
+            <h2>结果</h2>
+            <span class="col-tip" id="elapsed"></span>
+          </div>
+          <div id="messages"></div>
+          <div id="summary" class="summary"></div>
+          <div id="kpis" class="kpis"></div>
+          <div id="charts" class="charts"></div>
+          <div id="tables-out" class="tables"></div>
+          <div id="warnings" class="warnings"></div>
+          <div id="notes" class="notes"></div>
+        </section>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div id="toast" class="toast"></div>
+<div id="tooltip" class="chart-tooltip"></div>
+
+<script src="chart.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
