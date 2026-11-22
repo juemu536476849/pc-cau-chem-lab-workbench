@@ -54,7 +54,8 @@ def get(exp_id):
 
 
 def public_spec(spec):
-    return {k: v for k, v in spec.items() if not k.startswith("_")}
+    from app.text import walk
+    return walk({k: v for k, v in spec.items() if not k.startswith("_")})
 
 
 def all_specs():

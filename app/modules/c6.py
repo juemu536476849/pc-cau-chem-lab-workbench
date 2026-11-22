@@ -240,3 +240,8 @@ def run(data):
         ],
         "warnings": warnings,
     }
+
+# 计算用到的公式（LaTeX 子集；前端与 Word 报告都会渲染成真正的公式）
+SPEC["formulas"] = [
+    r"\frac{\Delta P}{Z} = A u^{n}",
+]

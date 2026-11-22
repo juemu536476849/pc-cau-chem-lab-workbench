@@ -48,8 +48,8 @@ SPEC = {
         "note": "直接粘贴 Excel 两列以上即可；空白单元格自动跳过。原始记录为相对温度变化（K）。",
         "columns": [
             {"key": "t", "label": "t / min", "type": "number"},
-            {"key": "k1", "label": "KNO₃ ①", "type": "number"},
-            {"key": "k2", "label": "KNO₃ ②", "type": "number"},
+            {"key": "k_1", "label": "KNO₃ ①", "type": "number"},
+            {"key": "k_2", "label": "KNO₃ ②", "type": "number"},
             {"key": "c1", "label": "KCl ①", "type": "number"},
             {"key": "c2", "label": "KCl ②", "type": "number"},
         ],
@@ -171,3 +171,9 @@ def run(data):
         ],
         "warnings": warnings,
     }
+
+# 计算用到的公式（LaTeX 子集；前端与 Word 报告都会渲染成真正的公式）
+SPEC["formulas"] = [
+    r"W = \frac{Q_{s} M_{s}}{m_{s} \Delta T_{s}}",
+    r"\Delta H_{sol} = \frac{W \cdot \Delta T}{n}",
+]

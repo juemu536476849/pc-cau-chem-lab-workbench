@@ -30,19 +30,19 @@ SPEC = {
     "subtitle": "Huggins 作图外推特性黏度 [η] · Mark-Houwink 方程求 M",
     "tags": ["黏度", "特性黏度", "Huggins", "Kraemer", "Mark-Houwink"],
     "desc": "用乌氏黏度计测聚乙二醇（或同类高聚物）稀溶液在不同浓度下的流出时间，"
-            "以 ηsp/c 对 c 作 Huggins 直线、lnηr/c 对 c 作 Kraemer 直线，两条直线在 c→0 时交于同一点，"
+            "以 η_sp/c 对 c 作 Huggins 直线、lnη_r/c 对 c 作 Kraemer 直线，两条直线在 c→0 时交于同一点，"
             "该截距即特性黏度 [η]；再由 [η] = K·Mᵅ 反解黏均相对分子质量 M。",
     "method": [
-        "① 相对黏度 ηr = t/t0，增比黏度 ηsp = ηr − 1；",
-        "② Huggins 方程：ηsp/c = [η] + k_H·[η]²·c；",
-        "③ Kraemer 方程：lnηr/c = [η] − k_K·[η]²·c；",
+        "① 相对黏度 ηr = t/t_0，增比黏度 η_sp = ηr − 1；",
+        "② Huggins 方程：η_sp/c = [η] + k_H·[η]²·c；",
+        "③ Kraemer 方程：lnη_r/c = [η] − k_K·[η]²·c；",
         "④ 两式对 c 线性拟合，纵截距即 [η]；",
         "⑤ Mark-Houwink：[η] = K·Mᵅ ⇒ M = ([η]/K)^(1/α)。",
     ],
     "tables": [{
         "key": "raw",
         "title": "流出时间原始数据",
-        "note": "t0 为纯溶剂三次平行测定的均值（87.88、87.71、87.77 s）；"
+        "note": "t_0 为纯溶剂三次平行测定的均值（87.88、87.71、87.77 s）；"
                 "每份溶液三次平行流出时间取算术平均后使用。c 为原表浓度列（c = 100/(10+A)）。",
         "columns": [
             {"key": "a", "label": "加水量 A /mL", "type": "number"},
@@ -57,7 +57,7 @@ SPEC = {
         {"key": "method", "label": "外推方法", "type": "select", "default": "huggins",
          "options": [{"value": m["value"], "label": m["label"]} for m in METHODS],
          "hint": "决定用哪条直线的截距算 [η] 与 M"},
-        {"key": "t0", "label": "t0 纯溶剂流出时间", "type": "number", "default": 87.7867,
+        {"key": "t_0", "label": "t_0 纯溶剂流出时间", "type": "number", "default": 87.7867,
          "step": 0.0001, "hint": "s，三次平行均值"},
         {"key": "K", "label": "K（Mark-Houwink 常数）", "type": "number", "default": 1.25e-5,
          "step": 1e-6, "hint": "原表取 1.25×10⁻⁵，25 ℃ 下该溶剂体系的文献值"},
@@ -71,13 +71,13 @@ def run(data):
     rows = (data.get("tables") or {}).get("raw") or []
     p = data.get("params") or {}
 
-    t0 = num(p.get("t0"), 87.7867)
+    t0 = num(p.get("t_0"), 87.7867)
     kk = num(p.get("K"), 1.25e-5)
     alpha = num(p.get("alpha"), 0.78)
     method = p.get("method") or "huggins"
 
     if t0 is None or t0 <= 0:
-        raise ValueError("纯溶剂流出时间 t0 必须为正值（s）")
+        raise ValueError("纯溶剂流出时间 t_0 必须为正值（s）")
     if kk is None or kk <= 0:
         raise ValueError("Mark-Houwink 常数 K 必须为正值")
     if alpha is None or alpha <= 0:
@@ -98,7 +98,7 @@ def run(data):
             raise ValueError(f"第 {i} 行流出时间必须为正值（s）")
         t = sum(ts) / len(ts)
         if t <= t0:
-            raise ValueError(f"第 {i} 行溶液流出时间不大于纯溶剂 t0，ηsp ≤ 0，请检查 t0 或该组数据")
+            raise ValueError(f"第 {i} 行溶液流出时间不大于纯溶剂 t0，η_sp ≤ 0，请检查 t0 或该组数据")
         eta_r = t / t0
         eta_sp = eta_r - 1.0
         pts.append({"a": a, "c": c, "t": t, "eta_r": eta_r, "eta_sp": eta_sp,
@@ -124,7 +124,7 @@ def run(data):
         eta = eta_h
 
     if eta <= 0:
-        raise ValueError("外推得到的特性黏度 [η] 非正，无法计算相对分子质量，请检查浓度或 t0")
+        raise ValueError("外推得到的特性黏度 [η] 非正，无法计算相对分子质量，请检查浓度或 t_0")
 
     mw = (eta / kk) ** (1.0 / alpha)
     k_h = fh["slope"] / eta_h ** 2 if eta_h > 0 else None
@@ -132,16 +132,16 @@ def run(data):
     c_hi = max(cs)
     chart = {
         "title": "Huggins / Kraemer 作图外推 [η]",
-        "xlabel": "c", "ylabel": "ηsp/c  与  lnηr/c",
+        "xlabel": "c", "ylabel": "η_sp/c  与  lnη_r/c",
         "series": [
-            {"name": "ηsp/c（Huggins）", "type": "scatter", "color": "#2f6df6",
+            {"name": "η_sp/c（Huggins）", "type": "scatter", "color": "#2f6df6",
              "points": [[q["c"], q["red"]] for q in pts]},
-            {"name": "lnηr/c（Kraemer）", "type": "scatter", "color": "#e5533d",
+            {"name": "lnη_r/c（Kraemer）", "type": "scatter", "color": "#e5533d",
              "points": [[q["c"], q["inh"]] for q in pts]},
-            {"name": f"ηsp/c = {fh['slope']:.5f}c + {eta_h:.5f}", "type": "line",
+            {"name": f"η_sp/c = {fh['slope']:.5f}c + {eta_h:.5f}", "type": "line",
              "color": "#2f6df6",
              "points": [[0.0, eta_h], [c_hi * 1.05, line_y(fh, c_hi * 1.05)]]},
-            {"name": f"lnηr/c = {fk['slope']:.5f}c + {eta_k:.5f}", "type": "line", "dash": True,
+            {"name": f"lnη_r/c = {fk['slope']:.5f}c + {eta_k:.5f}", "type": "line", "dash": True,
              "color": "#e5533d",
              "points": [[0.0, eta_k], [c_hi * 1.05, line_y(fk, c_hi * 1.05)]]},
         ],
@@ -180,26 +180,26 @@ def run(data):
             {"label": "k_H（Huggins 常数）", "value": round(k_h, 4) if k_h else 0,
              "digits": 4, "hint": "直线斜率 / [η]²，反映高分子–溶剂相互作用"},
             {"label": "r（Huggins）", "value": round(fh["r"], 4), "digits": 4,
-             "hint": "ηsp/c–c 线性相关系数"},
+             "hint": "η_sp/c–c 线性相关系数"},
         ],
         "charts": [chart],
         "tables": [
-            {"title": "黏度数据处理", "columns": ["加水量/mL", "c", "t /s", "ηr", "ηsp",
-                                            "ηsp/c", "lnηr/c"], "rows": data_rows},
+            {"title": "黏度数据处理", "columns": ["加水量/mL", "c", "t /s", "ηr", "η_sp",
+                                            "η_sp/c", "lnη_r/c"], "rows": data_rows},
             {"title": "外推结果与相对分子质量", "columns": ["方法", "斜率", "截距 [η]", "r",
                                                 "M /(g·mol⁻¹)"], "rows": fit_rows},
         ],
         "notes": [
             f"t0 = {t0:.4f} s（原表三次 87.88、87.71、87.77 s 的均值）；t 为该组三次平行流出时间的均值。",
-            "ηr = t/t0；ηsp = ηr − 1；Huggins：ηsp/c = [η] + k_H[η]²c；"
-            "Kraemer：lnηr/c = [η] − k_K[η]²c。两式截距都等于 [η]，本模块两条直线都给出。",
-            "与实验报告对照：报告图注为 ηsp/c 直线 y = 0.0008x + 0.0377（R² = 0.9996）、"
-            "lnηr/c 直线 y = −3E−05x + 0.038（R² = 0.9934）；本模块复算 Huggins 斜率 0.000812、"
+            "ηr = t/t_0；η_sp = ηr − 1；Huggins：η_sp/c = [η] + k_H[η]²c；"
+            "Kraemer：lnη_r/c = [η] − k_K[η]²c。两式截距都等于 [η]，本模块两条直线都给出。",
+            "与实验报告对照：报告图注为 η_sp/c 直线 y = 0.0008x + 0.0377（R² = 0.9996）、"
+            "lnη_r/c 直线 y = −3E−05x + 0.038（R² = 0.9934）；本模块复算 Huggins 斜率 0.000812、"
             "截距 0.037731、R² = 0.99962，Kraemer 斜率 −2.7×10⁻⁵、截距 0.038041、R² = 0.99339，与之吻合。",
             f"取 K = {kk:g}、α = {alpha:g}，M = ([η]/K)^(1/α)。原表 M = (K8/K9)^(1/K10)，"
             "K8 为截距、K9 = 0.0000125、K10 = 0.78；Huggins 支路得 M ≈ 28924（原表 28924.3153），"
             "Kraemer 支路 ≈ 29230，两者平均 ≈ 29077。",
-            "原表另有一个 Sheet1（只有单次流出时间、t0 = 86.27 s），本模块采用带三次平行的 Sheet1 (2)，"
+            "原表另有一个 Sheet1（只有单次流出时间、t_0 = 86.27 s），本模块采用带三次平行的 Sheet1 (2)，"
             "与原表 K11 单元格所用数据一致。",
         ],
         "warnings": warnings,

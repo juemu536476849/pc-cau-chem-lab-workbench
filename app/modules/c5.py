@@ -527,3 +527,9 @@ def run(data):
         "notes": notes,
         "warnings": warnings,
     }
+
+# 计算用到的公式（LaTeX 子集；前端与 Word 报告都会渲染成真正的公式）
+SPEC["formulas"] = [
+    r"y = \frac{R}{R+1}x + \frac{x_{D}}{R+1}",
+    r"x_{A} = \frac{W_{A}/46}{W_{A}/46 + (1-W_{A})/60}",
+]

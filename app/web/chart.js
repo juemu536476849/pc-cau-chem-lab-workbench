@@ -1,5 +1,6 @@
 /* 轻量 SVG 图表渲染器（无外部依赖；支持线性/对数坐标） */
 (function (global) {
+
   const PALETTE = ["#2563eb", "#e5533d", "#0ea5a4", "#8b5cf6", "#f59e0b", "#0e7490", "#db2777", "#65a30d"];
   const NS = "http://www.w3.org/2000/svg";
 
@@ -8,6 +9,31 @@
     for (const k in attrs) if (attrs[k] !== undefined && attrs[k] !== null) e.setAttribute(k, attrs[k]);
     if (parent) parent.appendChild(e);
     return e;
+  }
+
+  /* 上下标记号：_{x} / ^{x}（也接受 k_H、M^0.78 这类 ASCII 写法） */
+  function richText(node, s) {
+    node.textContent = "";
+    let str = String(s == null ? "" : s);
+    str = str.replace(/([^\s{_])_(?:([A-Za-z][A-Za-z0-9]{0,11})|([0-9]{1,2})|([\u4e00-\u9fff]{1,4})|(\u221e))(?![A-Za-z0-9{])/g, function(m,a,b,c,d){return a+"_{"+(b||c||d||e)+"}";});
+    str = str.replace(/\^([A-Za-z0-9.\-∞]{1,6})(?![A-Za-z0-9{])/g, "^{$1}");
+    const re = /(_\{[^{}]*\}|\^\{[^{}]*\})/g;
+    let idx = 0, m;
+    const push = (txt, mode) => {
+      if (!txt) return;
+      const t = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+      t.textContent = txt;
+      if (mode === "sub") { t.setAttribute("baseline-shift", "sub"); t.setAttribute("font-size", "80%"); }
+      else if (mode === "sup") { t.setAttribute("baseline-shift", "super"); t.setAttribute("font-size", "80%"); }
+      node.appendChild(t);
+    };
+    while ((m = re.exec(str))) {
+      push(str.slice(idx, m.index));
+      push(m[0].slice(2, -1), m[0][0] === "_" ? "sub" : "sup");
+      idx = re.lastIndex;
+    }
+    push(str.slice(idx));
+    return node;
   }
 
   function fmtNum(v, digits) {
@@ -129,12 +155,10 @@
 
     // 轴标题
     if (spec.xlabel) {
-      const t = el("text", { x: m.l + iw / 2, y: height - 8, "text-anchor": "middle", "font-size": 11.5, fill: "#64748b" }, svg);
-      t.textContent = spec.xlabel;
+      const t = richText(el("text", { x: m.l + iw / 2, y: height - 8, "text-anchor": "middle", "font-size": 11.5, fill: "#64748b" }, svg), spec.xlabel);
     }
     if (spec.ylabel) {
-      const t = el("text", { x: 14, y: m.t + ih / 2, "text-anchor": "middle", "font-size": 11.5, fill: "#64748b", transform: `rotate(-90 14 ${m.t + ih / 2})` }, svg);
-      t.textContent = spec.ylabel;
+      const t = richText(el("text", { x: 14, y: m.t + ih / 2, "text-anchor": "middle", "font-size": 11.5, fill: "#64748b", transform: `rotate(-90 14 ${m.t + ih / 2})` }, svg), spec.ylabel);
     }
 
     // 水平 / 垂直参考线
@@ -147,8 +171,7 @@
         let ly = y - 5;
         while (usedLblY.some(v => Math.abs(v - ly) < 12)) ly -= 12;
         usedLblY.push(ly);
-        const t = el("text", { x: m.l + iw - 4, y: ly, "text-anchor": "end", "font-size": 10.5, fill: h.color || "#64748b", stroke: "#fff", "stroke-width": 3.2, "paint-order": "stroke" }, svg);
-        t.textContent = h.label;
+        richText(el("text", { x: m.l + iw - 4, y: ly, "text-anchor": "end", "font-size": 10.5, fill: h.color || "#64748b", stroke: "#fff", "stroke-width": 3.2, "paint-order": "stroke" }, svg), h.label);
       }
     });
     const labelTops = [];
@@ -161,8 +184,7 @@
         let y = m.t + 11;
         while (labelTops.some(o => Math.abs(o.x - x) < 64 && Math.abs(o.y - y) < 12)) y += 13;
         labelTops.push({ x: x, y: y });
-        const t = el("text", { x: x + 4, y: y, "font-size": 10.5, fill: v.color || "#b45309", stroke: "#fff", "stroke-width": 3.2, "paint-order": "stroke" }, svg);
-        t.textContent = v.label;
+        richText(el("text", { x: x + 4, y: y, "font-size": 10.5, fill: v.color || "#b45309", stroke: "#fff", "stroke-width": 3.2, "paint-order": "stroke" }, svg), v.label);
       }
     });
 
@@ -203,8 +225,7 @@
       const x = sx(+p.x), y = sy(+p.y);
       el("circle", { cx: x, cy: y, r: 4.2, fill: "#fff", stroke: p.color || "#e11d48", "stroke-width": 2 }, svg);
       if (p.label) {
-        const txt = el("text", { x: x + 8, y: y - 8, "font-size": 10.5, fill: p.color || "#be123c", "font-weight": 600 }, svg);
-        txt.textContent = p.label;
+        richText(el("text", { x: x + 8, y: y - 8, "font-size": 10.5, fill: p.color || "#be123c", "font-weight": 600 }, svg), p.label);
         let bb;
         try { bb = txt.getBBox(); } catch (e) { bb = null; }
         if (bb && bb.width) {

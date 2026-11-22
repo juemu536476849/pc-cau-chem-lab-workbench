@@ -14,6 +14,115 @@ async function api(url, opt) {
 
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+/* ---- 上下标与公式：_{x} ^{x} $..$ ---- */
+const MATH_SYM = {
+  "\\Delta": "Δ", "\\alpha": "α", "\\beta": "β", "\\gamma": "γ", "\\Gamma": "Γ",
+  "\\delta": "δ", "\\epsilon": "ε", "\\varepsilon": "ε", "\\zeta": "ζ", "\\eta": "η",
+  "\\theta": "θ", "\\kappa": "κ", "\\lambda": "λ", "\\Lambda": "Λ", "\\mu": "μ",
+  "\\nu": "ν", "\\xi": "ξ", "\\pi": "π", "\\rho": "ρ", "\\sigma": "σ", "\\Sigma": "Σ",
+  "\\tau": "τ", "\\phi": "φ", "\\varphi": "φ", "\\chi": "χ", "\\psi": "ψ", "\\omega": "ω",
+  "\\Omega": "Ω", "\\times": "×", "\\cdot": "·", "\\pm": "±", "\\infty": "∞",
+  "\\le": "≤", "\\leq": "≤", "\\ge": "≥", "\\geq": "≥", "\\ne": "≠", "\\approx": "≈",
+  "\\sum": "∑", "\\int": "∫", "\\partial": "∂", "\\%": "%", "\\,": "\u2009", "\\;": "\u2009",
+};
+const MATH_FUNCS = ["ln", "lg", "log", "exp", "sin", "cos", "tan", "max", "min"];
+
+/* 取一个参数：{...} 或单个字符 */
+function texGroup(s, i) {
+  while (i < s.length && s[i] === " ") i++;
+  if (s[i] === "{") {
+    let depth = 0, j = i;
+    for (; j < s.length; j++) {
+      if (s[j] === "{") depth++;
+      else if (s[j] === "}") { depth--; if (depth === 0) break; }
+    }
+    return [s.slice(i + 1, j), j + 1];
+  }
+  if (i < s.length) return [s[i], i + 1];
+  return ["", i];
+}
+/* 把一段 LaTeX 子集渲染成 HTML（递归、括号配对） */
+function texHTML(s) {
+  let out = "", i = 0;
+  while (i < s.length) {
+    const ch = s[i];
+    if (ch === "\\") {
+      let j = i + 1;
+      while (j < s.length && /[A-Za-z]/.test(s[j])) j++;
+      const cmd = s.slice(i, j);
+      const rest = s[j] === " " ? j + 1 : j;
+      if (cmd === "\\frac") {
+        const [a, i1] = texGroup(s, rest);
+        const [b, i2] = texGroup(s, i1);
+        out += `<span class="frac"><span class="num">${texHTML(a)}</span><span class="den">${texHTML(b)}</span></span>`;
+        i = i2; continue;
+      }
+      if (cmd === "\\sqrt") {
+        const [a, i1] = texGroup(s, rest);
+        out += `<span class="sqrt">√<span class="rad">${texHTML(a)}</span></span>`;
+        i = i1; continue;
+      }
+      if (cmd === "\\text" || cmd === "\\mathrm") {
+        const [a, i1] = texGroup(s, rest);
+        out += `<i class="up">${esc(a)}</i>`;
+        i = i1; continue;
+      }
+      if (cmd === "\\left" || cmd === "\\right") { i = rest; continue; }
+      if (MATH_SYM[cmd] !== undefined) { out += MATH_SYM[cmd]; i = rest; continue; }
+      if (MATH_FUNCS.indexOf(cmd.slice(1)) >= 0) { out += `<i class="up">${cmd.slice(1)}</i>`; i = rest; continue; }
+      out += esc(cmd); i = rest; continue;
+    }
+    if (ch === "_" || ch === "^") {
+      const [a, i1] = texGroup(s, i + 1);
+      out += ch === "_" ? `<sub>${texHTML(a)}</sub>` : `<sup>${texHTML(a)}</sup>`;
+      i = i1; continue;
+    }
+    if (ch === "{" || ch === "}") { i++; continue; }
+    out += esc(ch);
+    i++;
+  }
+  return out;
+}
+function plainRich(str) {
+  let t = esc(str);
+  t = t.replace(/_\{([^{}]*)\}/g, "<sub>$1</sub>");
+  t = t.replace(/\^\{([^{}]*)\}/g, "<sup>$1</sup>");
+  /* 兜底：未加花括号的 ASCII 写法，如 k_H、M^0.78 */
+  t = t.replace(/([^\s{_])_(?:([A-Za-z][A-Za-z0-9]{0,11})|([0-9]{1,2})|([\u4e00-\u9fff]{1,4})|(\u221e))(?![A-Za-z0-9{<])/g, function(m,a,b,c,d){return a+"<sub>"+(b||c||d||e)+"</sub>";});
+  t = t.replace(/\^([A-Za-z0-9.\-∞]{1,6})(?![A-Za-z0-9{<])/g, "<sup>$1</sup>");
+  return t;
+}
+/* 统一入口：普通字符、上下标记号、$行内公式$、$$独立公式$$ 可混排 */
+function rich(s) {
+  const str = String(s == null ? "" : s);
+  const parts = str.split(/(\$\$[^$]+\$\$|\$[^$]+\$)/g);
+  return parts.map(p => {
+    if (p.startsWith("$$") && p.endsWith("$$") && p.length > 4) return `<span class="math">${texHTML(p.slice(2, -2))}</span>`;
+    if (p.startsWith("$") && p.endsWith("$") && p.length > 2) return `<span class="math">${texHTML(p.slice(1, -1))}</span>`;
+    return plainRich(p);
+  }).join("");
+}
+function plainRich(str) {
+  let t = esc(str);
+  t = t.replace(/_\{([^{}]*)\}/g, "<sub>$1</sub>");
+  t = t.replace(/\^\{([^{}]*)\}/g, "<sup>$1</sup>");
+  /* 兜底：未加花括号的 ASCII 写法，如 k_H、M^0.78 */
+  t = t.replace(/([^\s{_])_(?:([A-Za-z][A-Za-z0-9]{0,11})|([0-9]{1,2})|([\u4e00-\u9fff]{1,4})|(\u221e))(?![A-Za-z0-9{<])/g, function(m,a,b,c,d){return a+"<sub>"+(b||c||d||e)+"</sub>";});
+  t = t.replace(/\^([A-Za-z0-9.\-∞]{1,6})(?![A-Za-z0-9{<])/g, "<sup>$1</sup>");
+  return t;
+}
+/* 统一入口：文本里可混排 普通字符、上下标记号、$行内公式$、$$独立公式$$ */
+function rich(s) {
+  const str = String(s == null ? "" : s);
+  const parts = str.split(/(\$\$[^$]+\$\$|\$[^$]+\$)/g);
+  return parts.map(p => {
+    if (p.startsWith("$$") && p.endsWith("$$") && p.length > 4) return `<span class="math">${texHTML(p.slice(2, -2))}</span>`;
+    if (p.startsWith("$") && p.endsWith("$") && p.length > 2) return `<span class="math">${texHTML(p.slice(1, -1))}</span>`;
+    return plainRich(p);
+  }).join("");
+}
+
+
 function toast(msg, bad) {
   const t = $("#toast");
   t.textContent = msg;
@@ -95,7 +204,7 @@ function renderHome() {
       c.className = "exp-card";
       c.innerHTML = `<div class="ec-top"><span class="ec-code">${esc(s.code)}</span><span class="ec-go">→</span></div>
         <h4>${esc(s.name)}</h4>
-        <p>${esc(s.subtitle || "")}</p>
+        <p>${rich(s.subtitle || "")}</p>
         <div class="ec-tags">${(s.tags || []).slice(0, 3).map(t => `<span>${esc(t)}</span>`).join("")}</div>`;
       c.onclick = () => selectSpec(s.id);
       cards.appendChild(c);
@@ -160,12 +269,14 @@ function selectSpec(id) {
 
   $("#code").textContent = spec.code;
   $("#name").textContent = spec.name;
-  $("#subtitle").textContent = spec.subtitle || "";
+  $("#subtitle").innerHTML = rich(spec.subtitle || "");
   $("#eyebrow").textContent = (spec.group || "") + "实验 · " + (spec.tags || []).slice(0, 2).join(" / ");
   $("#tags").innerHTML = (spec.tags || []).map((t, i) =>
     `<span class="tag${i % 2 ? " teal" : ""}">${esc(t)}</span>`).join("");
-  $("#method").innerHTML = (spec.method || []).map(m => `<li>${esc(m)}</li>`).join("");
-  $("#desc").textContent = spec.desc || "";
+  $("#method").innerHTML = (spec.method || []).map(m => `<li>${rich(m)}</li>`).join("");
+  const fml = spec.formulas || [];
+  $("#formulas").innerHTML = fml.map(f => `<div class="formula-line">${rich(`$$${f}$$`)}</div>`).join("");
+  $("#desc").innerHTML = rich(spec.desc || "");
 
   renderParams();
   renderInputTables();
@@ -197,16 +308,16 @@ function renderParams() {
   let h = `<div class="card"><div class="card-head"><h3>参数设置</h3><span class="sub">一般保持默认即可</span></div><div class="param-grid">`;
   spec.params.forEach(p => {
     const v = S.data.params[p.key];
-    h += `<div class="param"><label>${esc(p.label)}${p.unit ? `<span class="unit">${esc(p.unit)}</span>` : ""}</label>`;
+    h += `<div class="param"><label><span class="lb">${rich(p.label)}</span>${p.unit ? `<span class="unit">${rich(p.unit)}</span>` : ""}</label>`;
     if (p.type === "select") {
       h += `<select data-param="${esc(p.key)}">` + (p.options || []).map(o =>
-        `<option value="${esc(o.value)}"${String(o.value) === String(v) ? " selected" : ""}>${esc(o.label)}</option>`).join("") + `</select>`;
+        `<option value="${esc(o.value)}"${String(o.value) === String(v) ? " selected" : ""}>${rich(o.label)}</option>`).join("") + `</select>`;
     } else if (p.type === "checkbox") {
       h += `<input type="checkbox" data-param="${esc(p.key)}"${v ? " checked" : ""}>`;
     } else {
       h += `<input type="number" step="${p.step || "any"}" data-param="${esc(p.key)}" value="${esc(v)}">`;
     }
-    if (p.hint) h += `<span class="hint">${esc(p.hint)}</span>`;
+    if (p.hint) h += `<span class="hint">${rich(p.hint)}</span>`;
     h += `</div>`;
   });
   h += `</div></div>`;
@@ -232,14 +343,14 @@ function renderInputTables() {
     card.className = "card table-card";
     card.innerHTML = `
       <div class="card-head">
-        <h3>${esc(t.title || t.key)}</h3>
+        <h3>${rich(t.title || t.key)}</h3>
         <div>
           <button class="link-btn" data-act="import">导入文件</button>
         </div>
       </div>
-      ${t.note ? `<div class="table-note">${esc(t.note)}</div>` : ""}
+      ${t.note ? `<div class="table-note">${rich(t.note)}</div>` : ""}
       <div class="table-wrap"><table class="data" data-key="${esc(t.key)}">
-        <thead><tr><th>#</th>${(t.columns || []).map(c => `<th>${esc(c.label || c.key)}</th>`).join("")}</tr></thead>
+        <thead><tr><th>#</th>${(t.columns || []).map(c => `<th>${rich(c.label || c.key)}</th>`).join("")}</tr></thead>
         <tbody></tbody>
       </table></div>
       <div class="table-tools">
@@ -456,14 +567,14 @@ function renderResult(res) {
   const kpis = res.kpis || [];
   const k0 = kpis[0];
   $("#summary").innerHTML = k0
-    ? `本次结果：${esc(k0.label)} = <b>${esc(fmtNum(k0.value, k0.digits))}${k0.unit ? " " + esc(k0.unit) : ""}</b>${k0.hint ? `<em> · ${esc(k0.hint)}</em>` : ""}`
+    ? `本次结果：${rich(k0.label)} = <b>${esc(fmtNum(k0.value, k0.digits))}${k0.unit ? " " + rich(k0.unit) : ""}</b>${k0.hint ? `<em> · ${rich(k0.hint)}</em>` : ""}`
     : "";
 
   $("#kpis").innerHTML = kpis.map(k => `
     <div class="kpi">
-      <div class="k-label">${esc(k.label)}</div>
-      <div class="k-value">${esc(fmtNum(k.value, k.digits))}${k.unit ? `<small>${esc(k.unit)}</small>` : ""}</div>
-      ${k.hint ? `<div class="k-hint" title="${esc(k.hint)}">${esc(k.hint)}</div>` : ""}
+      <div class="k-label"><span>${rich(k.label)}</span></div>
+      <div class="k-value"><span class="k-num">${esc(fmtNum(k.value, k.digits))}</span>${k.unit ? `<small>${rich(k.unit)}</small>` : ""}</div>
+      ${k.hint ? `<div class="k-hint" title="${esc(k.hint)}">${rich(k.hint)}</div>` : ""}
     </div>`).join("");
 
   // 提示放到结果末尾，不干扰主要结论
@@ -472,8 +583,8 @@ function renderResult(res) {
   wbox.classList.toggle("show", warns.length > 0);
   const wlong = warns.join("").length > 180;
   wbox.innerHTML = wlong
-    ? `<details class="notes warn-notes"><summary>⚠ ${warns.length} 条数据提示（点击展开；不影响主要结果）</summary>${warns.map(w => `<div class="msg warn">${esc(w)}</div>`).join("")}</details>`
-    : warns.map(w => `<div class="msg warn">${esc(w)}</div>`).join("");
+    ? `<details class="notes warn-notes"><summary>⚠ ${warns.length} 条数据提示（点击展开；不影响主要结果）</summary>${warns.map(w => `<div class="msg warn"><span>${rich(w)}</span></div>`).join("")}</details>`
+    : warns.map(w => `<div class="msg warn"><span>${rich(w)}</span></div>`).join("");
 
   // 图表
   const charts = res.charts || [];
@@ -482,7 +593,7 @@ function renderResult(res) {
   charts.forEach((c, i) => {
     const card = document.createElement("div");
     card.className = "chart-card";
-    card.innerHTML = `<div class="chart-head"><h3>${esc(c.title || "图表")}</h3>
+    card.innerHTML = `<div class="chart-head"><h3>${rich(c.title || "图表")}</h3>
         <div class="acts"><button class="link-btn" data-dl="${i}">下载 SVG</button></div></div>
       <div class="chart-body"></div><div class="legend"></div>`;
     cbox.appendChild(card);
@@ -493,7 +604,7 @@ function renderResult(res) {
     (c.series || []).forEach((s, k) => {
       if (seen[s.name]) return;
       seen[s.name] = 1;
-      lg.push(`<span><i class="${s.type === "scatter" ? "" : "line"}" style="background:${s.color || PALETTE[k % PALETTE.length]}"></i>${esc(s.name)}</span>`);
+      lg.push(`<span><i class="${s.type === "scatter" ? "" : "line"}" style="background:${s.color || PALETTE[k % PALETTE.length]}"></i>${rich(s.name)}</span>`);
     });
     card.querySelector(".legend").innerHTML = lg.join("");
     card.querySelector("[data-dl]").onclick = () => Chart.download(body, (S.spec.code + "-" + (c.title || "chart")).replace(/[\\/:*?"<>|]/g, "_"));
@@ -505,11 +616,11 @@ function renderResult(res) {
   (res.tables || []).forEach(t => {
     const card = document.createElement("div");
     card.className = "card";
-    card.innerHTML = `<div class="card-head"><h3>${esc(t.title || "结果")}</h3>
+    card.innerHTML = `<div class="card-head"><h3>${rich(t.title || "结果")}</h3>
         <span class="sub">${(t.rows || []).length} 行</span></div>
       <div class="result-wrap"><table class="result">
-        <thead><tr>${(t.columns || []).map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead>
-        <tbody>${(t.rows || []).map(row => `<tr>${row.map(v => `<td>${esc(typeof v === "number" ? fmtNum(v, 6) : v)}</td>`).join("")}</tr>`).join("")}</tbody>
+        <thead><tr>${(t.columns || []).map(c => `<th>${rich(c)}</th>`).join("")}</tr></thead>
+        <tbody>${(t.rows || []).map(row => `<tr>${row.map(v => `<td>${typeof v === "number" ? esc(fmtNum(v, 6)) : rich(v)}</td>`).join("")}</tr>`).join("")}</tbody>
       </table></div>`;
     tbox.appendChild(card);
   });
@@ -520,7 +631,7 @@ function renderResult(res) {
   const open = notes.length <= 2;
   $("#notes").innerHTML = `<details class="notes"${open ? " open" : ""}>
     <summary>计算说明${notes.length > 2 ? `（${notes.length} 条，点击展开）` : ""}</summary>
-    <ul>${notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul></details>`;
+    <ul>${notes.map(n => `<li>${rich(n)}</li>`).join("")}</ul></details>`;
 }
 
 /* ---------------- 导出 / 复位 / 搜索 ---------------- */

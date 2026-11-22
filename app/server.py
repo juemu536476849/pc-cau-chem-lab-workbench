@@ -133,6 +133,13 @@ def api_open_folder():
         return jsonify({"ok": False, "msg": str(e)})
 
 
+def _with_defaults(spec, params):
+    """把 SPEC 里的参数默认值补进来：前端/接口只传改动项时也能算对。"""
+    out = {p.get("key"): p.get("default") for p in (spec.get("params") or []) if p.get("key")}
+    out.update(params or {})
+    return out
+
+
 @app.route("/api/run", methods=["POST"])
 def api_run():
     payload = request.get_json(force=True, silent=True) or {}
@@ -140,7 +147,7 @@ def api_run():
     spec = registry.get(exp_id)
     if not spec:
         return jsonify({"ok": False, "error": f"未知实验：{exp_id}"}), 404
-    data = {"tables": payload.get("tables") or {}, "params": payload.get("params") or {}}
+    data = {"tables": payload.get("tables") or {}, "params": _with_defaults(spec, payload.get("params"))}
     t0 = time.time()
     try:
         result = spec["_module"].run(data)
@@ -156,6 +163,8 @@ def api_run():
     result.setdefault("tables", [])
     result.setdefault("notes", [])
     result.setdefault("warnings", [])
+    from app.text import walk
+    result = walk(result)
     return jsonify(result)
 
 
@@ -171,7 +180,7 @@ def api_export():
     for t in spec.get("tables", []):
         if tables.get(t.get("key")) is None:
             tables[t["key"]] = [list(r) for r in (t.get("rows") or [])]
-    data = {"tables": tables, "params": payload.get("params") or {}}
+    data = {"tables": tables, "params": _with_defaults(spec, payload.get("params"))}
     try:
         result = spec["_module"].run(data)
     except Exception as e:
@@ -263,7 +272,7 @@ def api_report_docx():
     for t in spec.get("tables", []):
         if tables.get(t.get("key")) is None:
             tables[t["key"]] = [list(r) for r in (t.get("rows") or [])]
-    data = {"tables": tables, "params": payload.get("params") or {}}
+    data = {"tables": tables, "params": _with_defaults(spec, payload.get("params"))}
     try:
         result = spec["_module"].run(data)
     except Exception as e:

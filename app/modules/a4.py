@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""A4 溶液电导率的测定：Λm–√c 线性外推求无限稀释摩尔电导率 Λm∞。"""
+"""A4 溶液电导率的测定：Λ_m–√c 线性外推求无限稀释摩尔电导率 Λ_m^∞。"""
 import math
 
 from ..core import linfit, line_y, num
@@ -39,16 +39,16 @@ SPEC = {
     "code": "A4",
     "group": "物化",
     "name": "溶液电导率的测定",
-    "subtitle": "Λm–√c 线性外推 · 求无限稀释摩尔电导率 Λm∞",
+    "subtitle": "Λ_m–√c 线性外推 · 求无限稀释摩尔电导率 Λ_m^∞",
     "tags": ["电导率", "摩尔电导率", "Kohlrausch 外推", "弱电解质"],
-    "desc": "用交流电桥测四种溶液不同浓度下的电导率 κ，换算成摩尔电导率 Λm；"
-            "对强电解质，Λm 与 √c 在低浓度下近似成直线，外推到 c→0 即得 Λm∞。"
+    "desc": "用交流电桥测四种溶液不同浓度下的电导率 κ，换算成摩尔电导率 Λ_m；"
+            "对强电解质，Λ_m 与 √c 在低浓度下近似成直线，外推到 c→0 即得 Λ_m^∞。"
             "弱电解质 HAc 只在极稀时才部分电离，直线外推不成立，结果仅作对照。",
     "method": [
-        "① Λm = κ/c，κ 由 μS/cm 换成 S/m（×10⁻⁴），c 用 mol/m³；",
-        "② 以 √c 为横坐标、Λm 为纵坐标作散点；",
-        "③ 对 4 个点作最小二乘直线 Λm = Λm∞ − A√c；",
-        "④ 纵截距即无限稀释摩尔电导率 Λm∞，斜率反映离子间相互作用；",
+        "① Λ_m = κ/c，κ 由 μS/cm 换成 S/m（×10⁻⁴），c 用 mol/m³；",
+        "② 以 √c 为横坐标、Λ_m 为纵坐标作散点；",
+        "③ 对 4 个点作最小二乘直线 Λ_m = Λ_m^∞ − A√c；",
+        "④ 纵截距即无限稀释摩尔电导率 Λ_m^∞，斜率反映离子间相互作用；",
         "⑤ 与 25 ℃ 文献值（离子摩尔电导率加和）比较，判断外推是否合理。",
     ],
     "tables": [{
@@ -106,7 +106,7 @@ def run(data):
         if not pts:
             continue
         if len(pts) < 2:
-            raise ValueError(f"{s['label']} 只有 1 个浓度点，至少需要 2 点才能作 Λm–√c 直线")
+            raise ValueError(f"{s['label']} 只有 1 个浓度点，至少需要 2 点才能作 Λ_m–√c 直线")
         xs, ys, detail = [], [], []
         for c, k in sorted(pts):
             if c <= 0:
@@ -134,16 +134,16 @@ def run(data):
 
     x_lo, x_hi = min(r["xs"]), max(r["xs"])
     chart = {
-        "title": f"{r['meta']['label']} 溶液 · Λm–√c 直线外推",
-        "xlabel": "√c /(mol·m⁻³)^½", "ylabel": "Λm /(S·m²·mol⁻¹)",
+        "title": f"{r['meta']['label']} 溶液 · Λ_m–√c 直线外推",
+        "xlabel": "√c /(mol·m⁻³)^½", "ylabel": "Λ_m /(S·m²·mol⁻¹)",
         "series": [
             {"name": "实验点", "type": "scatter", "color": "#2f6df6",
              "points": [[x, y] for x, y in zip(r["xs"], r["ys"])]},
-            {"name": f"Λm = {f['slope']:.4f}·√c + {lam_inf:.4f}", "type": "line",
+            {"name": f"Λ_m = {f['slope']:.4f}·√c + {lam_inf:.4f}", "type": "line",
              "color": "#e5533d",
              "points": [[0.0, lam_inf], [x_hi * 1.05, line_y(f, x_hi * 1.05)]]},
         ],
-        "points": [{"x": 0.0, "y": lam_inf, "label": f"Λm∞ = {lam_inf:.4f}"}],
+        "points": [{"x": 0.0, "y": lam_inf, "label": f"Λ_m^∞ = {lam_inf:.4f}"}],
         "vlines": [], "hlines": [],
         "annotations": True,
         "xrange": [0, x_hi * 1.08],
@@ -162,33 +162,33 @@ def run(data):
     warnings = []
     if abs(f["r"]) < 0.995:
         warnings.append(f"{r['meta']['label']} 的 r = {f['r']:.4f} 偏低，"
-                        f"该体系低浓度点离散，Λm∞ 外推不确定度较大")
+                        f"该体系低浓度点离散，Λ_m^∞ 外推不确定度较大")
     if sel == "hac" or (r["meta"]["label"] == "HAc"):
-        warnings.append("HAc 是弱电解质，Λm–√c 直线外推不适用（截距远低于文献值属正常），"
+        warnings.append("HAc 是弱电解质，Λ_m–√c 直线外推不适用（截距远低于文献值属正常），"
                         "只可作定性对照")
     if lam_inf <= 0:
-        warnings.append("拟合截距非正，Λm∞ 无物理意义，请检查浓度与电导率的单位")
+        warnings.append("拟合截距非正，Λ_m^∞ 无物理意义，请检查浓度与电导率的单位")
 
     return {
         "kpis": [
-            {"label": "Λm∞", "value": round(lam_inf, 4), "unit": "S·m²·mol⁻¹", "digits": 4,
-             "hint": f"{r['meta']['label']} 的 Λm–√c 直线纵截距"},
+            {"label": "Λ_m^∞", "value": round(lam_inf, 4), "unit": "S·m²·mol⁻¹", "digits": 4,
+             "hint": f"{r['meta']['label']} 的 Λ_m–√c 直线纵截距"},
             {"label": "斜率", "value": round(f["slope"], 5), "unit": "S·m²·mol⁻¹·(mol·m⁻³)^-½",
              "digits": 5, "hint": "Kohlrausch 直线的斜率为负"},
             {"label": "r", "value": round(f["r"], 4), "digits": 4, "hint": "4 点线性相关系数"},
             {"label": "相对文献偏差", "value": round(dev, 1), "unit": "%", "digits": 1,
-             "hint": f"文献 Λm∞ = {lit:.4f}（25 ℃，离子摩尔电导率加和）"},
+             "hint": f"文献 Λ_m^∞ = {lit:.4f}（25 ℃，离子摩尔电导率加和）"},
         ],
         "charts": [chart],
         "tables": [{
-            "title": "四体系 Λm–√c 拟合汇总",
-            "columns": ["体系", "斜率", "Λm∞ /(S·m²·mol⁻¹)", "r",
-                        "文献 Λm∞", "相对偏差 /%"],
+            "title": "四体系 Λ_m–√c 拟合汇总",
+            "columns": ["体系", "斜率", "Λ_m^∞ /(S·m²·mol⁻¹)", "r",
+                        "文献 Λ_m^∞", "相对偏差 /%"],
             "rows": table_rows,
         }],
         "notes": [
-            "Λm 换算：κ[μS/cm]×10⁻⁴ 得 κ[S/m]，再除以 c[mol/m³]，即 Λm = κ·10⁻⁴/c。"
-            "例：NaCl c=4 mol/m³、κ=557 μS/cm → Λm = 0.013925 S·m²·mol⁻¹。",
+            "Λ_m 换算：κ[μS/cm]×10⁻⁴ 得 κ[S/m]，再除以 c[mol/m³]，即 Λ_m = κ·10⁻⁴/c。"
+            "例：NaCl c=4 mol/m³、κ=557 μS/cm → Λ_m = 0.013925 S·m²·mol⁻¹。",
             "与实验报告逐条对照：报告 NaCl y=−0.0004x+0.0148、r=−0.9453；HCl y=−0.0001x+0.0414、r=−0.9951；"
             "NaAc y=−0.0003x+0.0091、r=−0.9998；HAc y=−0.0000x+0.0009、r=−0.9930。"
             "本模块用 A4数据处理.xlsx 的 Sheet1 (2)、以 √c 作横坐标复算，四条直线的截距与 r 与报告完全吻合"
@@ -199,9 +199,9 @@ def run(data):
             "按 √c 拟合得截距 0.0134、r = −0.9612，而 PDF 版报告里写的是 0.0133、r = −0.9972，两者也不一致；"
             "本模块采用与 docx 报告数值逐条吻合的 A4数据处理.xlsx，未混用两版数据。",
             "文献值按 25 ℃ 离子摩尔电导率加和：H⁺ 349.8、Na⁺ 50.1、Cl⁻ 76.3、Ac⁻ 40.9（S·cm²·mol⁻¹），"
-            "换算后 Λm∞ 依次为 0.012645（NaCl）、0.042616（HCl）、0.009102（NaAc）、0.039072（HAc）。",
+            "换算后 Λ_m^∞ 依次为 0.012645（NaCl）、0.042616（HCl）、0.009102（NaAc）、0.039072（HAc）。",
             "原脚本按 Sheet1 (2) 的 [0:4]/[4:8]/[8:12]/[12:16] 行切片，分别对应 NaCl/HCl/NaAc/HAc，"
-            "本模块改用“体系”列分组，结果一致；HAc 的 Λm∞ 段落在原脚本里被注释掉，原因同上（弱电解质）。",
+            "本模块改用“体系”列分组，结果一致；HAc 的 Λ_m^∞ 段落在原脚本里被注释掉，原因同上（弱电解质）。",
         ],
         "warnings": warnings,
     }

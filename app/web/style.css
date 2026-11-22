@@ -232,8 +232,10 @@ table.data tr:hover td.idx{background:#f3f7fd}
 .mat .size{margin-left:auto;font-size:10px;color:#64748b;font-family:var(--mono)}
 .muted{color:#475569;font-size:12px;padding:4px 2px}
 
-.method{margin:0;padding:10px 18px 6px 34px;font-size:12.5px;color:#475569;line-height:1.75}
+.method{margin:0;padding:10px 18px 6px 6px;font-size:12.5px;color:#475569;line-height:1.8;list-style:none}
 .method li{padding-left:2px}
+.formulas .math{font-size:1.12em}
+.formula-line{padding:7px 10px}
 .method li::marker{color:#475569;font-family:var(--mono);font-size:11px}
 .desc{margin:4px 16px 14px;font-size:12px;color:#475569;line-height:1.7;border-left:2px solid #e2e8f0;padding-left:10px}
 
@@ -406,3 +408,25 @@ details.notes ul{margin:8px 0 0;padding-left:18px;color:var(--ink-2);font-size:1
 
 .warn-notes summary{color:#b45309;font-weight:600}
 .warn-notes .msg{margin-top:8px}
+
+/* ============ 公式与上下标 ============ */
+sub,sup{font-size:.74em;line-height:0;position:relative;vertical-align:baseline}
+sub{bottom:-.28em}
+sup{top:-.42em}
+.math{font-family:"Times New Roman","Times",serif;font-style:normal;white-space:nowrap;display:inline-flex;align-items:center;flex-wrap:nowrap;padding:0 1px;font-size:1.02em}
+.math i.up{font-style:normal;font-family:var(--font)}
+.frac{display:inline-flex;flex-direction:column;justify-content:center;vertical-align:middle;text-align:center;margin:0 .28em;line-height:1.15;font-size:.96em}
+.frac .num{border-bottom:1px solid currentColor;padding:0 .16em}
+.frac .den{padding:0 .16em}
+.sqrt{display:inline-flex;align-items:stretch;margin:0 .08em}
+.sqrt .rad{border-top:1px solid currentColor;padding:0 .14em;margin-left:-.06em}
+.k-value sub,.k-value sup{font-size:.62em}
+
+.formulas{margin:10px 0 2px;display:flex;flex-direction:column;gap:8px}
+.formula-line{font-size:13.5px;color:#1f2937;background:#f7f9fc;border:1px solid var(--line-2);
+  border-radius:8px;padding:8px 12px;text-align:center;overflow-x:auto}
+.formula-line .math{font-size:14.5px}
+
+.param label .lb{flex:1;min-width:0}
+.k-label span,.k-value .k-num{display:inline}
+.msg > span{flex:1;min-width:0}

@@ -93,7 +93,7 @@ def run(data):
             raise ValueError(f"第 {int(no) if no else '?'} 组剩余浓度不小于初始浓度，"
                              f"吸附量为负，请检查滴定体积或定容体积")
         gamma = (c0 - c) * vflask / m     # mmol/g
-        pts.append({"no": no, "m": m, "c0": c0, "c": c, "gamma": gamma,
+        pts.append({"no": no, "m": m, "c_0": c0, "c": c, "gamma": gamma,
                     "lgc": math.log10(c), "lgg": math.log10(gamma)})
 
     if len(pts) < 3:
@@ -153,7 +153,7 @@ def run(data):
     }
 
     point_rows = [[q["no"] if q["no"] is not None else "", round(q["m"], 4),
-                   round(q["c0"], 5), round(q["c"], 5), round(q["gamma"], 4),
+                   round(q["c_0"], 5), round(q["c"], 5), round(q["gamma"], 4),
                    round(q["lgc"], 4), round(q["lgg"], 4)] for q in pts]
     fit_rows = [
         ["Freundlich", round(inv_n, 4), round(lg_k, 4), round(f["r"], 4),
