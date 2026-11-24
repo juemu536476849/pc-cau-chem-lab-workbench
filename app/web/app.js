@@ -102,33 +102,58 @@ function rich(s) {
     return plainRich(p);
   }).join("");
 }
-function plainRich(str) {
-  let t = esc(str);
-  t = t.replace(/_\{([^{}]*)\}/g, "<sub>$1</sub>");
-  t = t.replace(/\^\{([^{}]*)\}/g, "<sup>$1</sup>");
-  /* 兜底：未加花括号的 ASCII 写法，如 k_H、M^0.78 */
-  t = t.replace(/([^\s{_])_(?:([A-Za-z][A-Za-z0-9]{0,11})|([0-9]{1,2})|([\u4e00-\u9fff]{1,4})|(\u221e))(?![A-Za-z0-9{<])/g, function(m,a,b,c,d){return a+"<sub>"+(b||c||d||e)+"</sub>";});
-  t = t.replace(/\^([A-Za-z0-9.\-∞]{1,6})(?![A-Za-z0-9{<])/g, "<sup>$1</sup>");
-  return t;
-}
-/* 统一入口：文本里可混排 普通字符、上下标记号、$行内公式$、$$独立公式$$ */
-function rich(s) {
-  const str = String(s == null ? "" : s);
-  const parts = str.split(/(\$\$[^$]+\$\$|\$[^$]+\$)/g);
-  return parts.map(p => {
-    if (p.startsWith("$$") && p.endsWith("$$") && p.length > 4) return `<span class="math">${texHTML(p.slice(2, -2))}</span>`;
-    if (p.startsWith("$") && p.endsWith("$") && p.length > 2) return `<span class="math">${texHTML(p.slice(1, -1))}</span>`;
-    return plainRich(p);
-  }).join("");
-}
-
-
 function toast(msg, bad) {
   const t = $("#toast");
   t.textContent = msg;
   t.className = "toast show" + (bad ? " bad" : "");
   clearTimeout(t._h);
   t._h = setTimeout(() => (t.className = "toast"), 2600);
+}
+
+/* ---------------- 剪贴板：复制表格到 Excel ---------------- */
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (e) { /* 落到下面的兜底方案 */ }
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.setAttribute("readonly", "");
+  ta.style.position = "fixed";
+  ta.style.top = "-1000px";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  ta.setSelectionRange(0, text.length);
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+  ta.remove();
+  return ok;
+}
+
+/** 表头里的上下标记号转成 Excel 里好读的纯文本（k^{-1} → k^-1） */
+function labelText(s) {
+  return String(s == null ? "" : s)
+    .replace(/\$\$?/g, "")
+    .replace(/\^\{([^{}]*)\}/g, "^$1")
+    .replace(/_\{([^{}]*)\}/g, "_$1");
+}
+
+/** 按 Excel 习惯用 TSV（制表符 + 换行）拼表格文本，首行是表头 */
+function toTSV(head, rows) {
+  const cell = v => String(v == null ? "" : v).replace(/[\t\r\n]+/g, " ").trim();
+  const lines = [head.map(cell).join("\t")];
+  (rows || []).forEach(r => lines.push((r || []).map(cell).join("\t")));
+  return lines.join("\r\n");
+}
+
+async function copyTable(head, rows, tip) {
+  const ok = await copyText(toTSV(head, rows));
+  toast(ok
+    ? `已复制 ${rows.length} 行 × ${head.length} 列${tip ? "（" + tip + "）" : ""}，可直接粘贴到 Excel`
+    : "复制失败：浏览器不允许写剪贴板，请改用「导出 Excel」", !ok);
 }
 
 function fmtNum(v, digits) {
@@ -143,11 +168,11 @@ function fmtNum(v, digits) {
   return parseFloat(v.toFixed(d)).toString();
 }
 
-/** 数据表里显示的数值：6 位有效数字，去掉浮点尾巴 */
+/** 数据表里显示的数值：10 位有效数字，去掉浮点尾巴（足够保留实验原始精度，又不显示 0.30000000000000004） */
 function fmtCell(v) {
   if (typeof v !== "number" || !isFinite(v)) return String(v);
   if (v === 0) return "0";
-  return Number(v.toPrecision(6)).toString();
+  return Number(v.toPrecision(10)).toString();
 }
 
 /* ---------------- 启动 ---------------- */
@@ -357,9 +382,10 @@ function renderInputTables() {
         <button class="mini-btn" data-act="add">＋ 加行</button>
         <button class="mini-btn" data-act="del">－ 删末行</button>
         <button class="mini-btn" data-act="clear">清空</button>
+        <button class="mini-btn" data-act="copy" title="把整张表复制到剪贴板，可直接粘贴到 Excel">复制表格</button>
         <input type="file" accept=".xlsx,.xls,.csv,.txt" hidden>
         <span class="spacer"></span>
-        <span class="table-count">${(t.rows || []).length} 行 · 可直接粘贴 Excel 区域</span>
+        <span class="table-count">${(t.rows || []).length} 行 · 可粘贴 / 复制 Excel 区域</span>
       </div>`;
     box.appendChild(card);
     fillTable(card, t);
@@ -370,7 +396,7 @@ function renderInputTables() {
 function fillTable(card, t) {
   const tb = card.querySelector("tbody");
   const rows = S.data.tables[t.key] || [];
-  tb.innerHTML = rows.map((row, r) => `<tr>` + `<td class="idx">${r + 1}</td>` +
+  tb.innerHTML = rows.map((row, r) => `<tr>` + `<td class="idx" data-r="${r}">${r + 1}</td>` +
     (t.columns || []).map((c, j) => {
       const v = row[j] == null ? "" : (typeof row[j] === "number" ? fmtCell(row[j]) : row[j]);
       return `<td><input data-r="${r}" data-c="${j}" inputmode="decimal" value="${esc(v)}"></td>`;
@@ -400,26 +426,32 @@ function bindTable(card, t) {
     if (e.target.closest("input[data-r]")) scheduleRun(0);
   });
   table.addEventListener("paste", e => {
-    const td = e.target.closest("td");
+    const target = e.target;
+    const td = target.closest("td");
     if (!td) return;
     const text = (e.clipboardData || window.clipboardData).getData("text");
-    if (!text) return;
-    if (!/[\t\n]/.test(text)) return;           // 单元格内正常粘贴
+    if (text === null || text === undefined) return;
+    if (!/[\t\r\n]/.test(text)) return;         // 单元格内正常粘贴单个值
     e.preventDefault();
-    const startR = +td.dataset.r, startC = +td.dataset.c;
-    if (td.classList.contains("idx")) return;
+    /* 起点：优先取输入框上的 data-r/data-c（原来误读 td 的 dataset，导致整块粘贴永远失效） */
+    const inp = target.closest("input[data-r]");
+    const startR = inp ? +inp.dataset.r : +td.dataset.r || 0;
+    const startC = inp ? +inp.dataset.c : (td.classList.contains("idx") ? 0 : 0);
     const lines = text.replace(/\r/g, "").split("\n").filter(l => l.trim() !== "");
+    if (!lines.length) return;
     const grid = lines.map(l => l.split("\t"));
+    const width = (t.columns || []).length;
     const need = startR + grid.length;
     const rows = S.data.tables[t.key];
-    while (rows.length < need) rows.push(new Array((t.columns || []).length).fill(""));
+    while (rows.length < need) rows.push(new Array(width).fill(""));
+    let filled = 0;
     grid.forEach((line, i) => line.forEach((v, j) => {
       const r = startR + i, c = startC + j;
-      if (r < rows.length && c < (t.columns || []).length) rows[r][c] = v.trim();
+      if (r < rows.length && c < width) { rows[r][c] = v.trim(); filled++; }
     }));
     fillTable(card, t);
     updateCount(card, t);
-    toast(`已粘贴 ${grid.length} 行 × ${grid[0].length} 列`);
+    toast(`已粘贴 ${grid.length} 行 × ${grid[0].length} 列（写入 ${filled} 个单元格）`);
     scheduleRun();
   });
   card.querySelectorAll("[data-act]").forEach(btn => {
@@ -430,6 +462,11 @@ function bindTable(card, t) {
       if (act === "add") rows.push(new Array(n).fill(""));
       if (act === "del") { if (rows.length > 1) rows.pop(); }
       if (act === "clear") { S.data.tables[t.key] = [new Array(n).fill("")]; }
+      if (act === "copy") {
+        const head = (t.columns || []).map(c => labelText(c.label || c.key));
+        await copyTable(head, S.data.tables[t.key], t.title || t.key);
+        return;
+      }
       if (act === "import") { card.querySelector("input[type=file]").click(); return; }
       fillTable(card, t);
       updateCount(card, t);
@@ -439,31 +476,46 @@ function bindTable(card, t) {
   const file = card.querySelector("input[type=file]");
   file.onchange = async () => {
     if (!file.files.length) return;
+    const n = (t.columns || []).length;
     const fd = new FormData();
     fd.append("file", file.files[0]);
+    fd.append("cols", String(n));          // 告诉后端目标列数，便于自动对齐（去掉多余的序号列）
     toast("正在读取文件…");
     const res = await api("/api/import", { method: "POST", body: fd });
     file.value = "";
     if (!res.ok) { toast(res.error || "读取失败", true); return; }
-    const n = (t.columns || []).length;
-    let rows = (res.rows || []).map(r => r.slice(0, n));
-    // 去掉全空行
+    const num = v => v === "" || !isNaN(Number(String(v).replace(/[\s,]/g, "")));
+    let rows = (res.rows || []).map(r => (r || []).slice(0, n));
     rows = rows.filter(r => r.some(v => String(v).trim() !== ""));
     if (!rows.length) { toast("文件里没有数据", true); return; }
-    // 若首行是文字表头（含非数字），自动去掉，避免把列名当数据
-    const num = v => v === "" || !isNaN(Number(String(v).replace(/[\s,]/g, "")));
-    if (rows.length > 1 && !rows[0].every(num)) rows = rows.slice(1);
+    // 旧后端兜底：只有后端没给 header 信息时，才在前端再剔一次可能的文字表头
+    // （新后端已经剔过表头，数据行里带文字列时不能再剔，否则会丢第一条数据）
+    if (!Array.isArray(res.header) && rows.length > 1 && !rows[0].every(num)) rows = rows.slice(1);
     S.data.tables[t.key] = rows.map(r => { while (r.length < n) r.push(""); return r; });
     fillTable(card, t);
     updateCount(card, t);
-    toast(`已导入 ${rows.length} 行（${res.name}）`);
+    // 逐格检查：不是数字的直接点名，避免"导进去算不出来"却不知道错在哪
+    const bad = [];
+    rows.forEach((r, i) => r.forEach((v, j) => {
+      const col = (t.columns || [])[j] || {};
+      if (String(v).trim() === "") return;
+      if (col.type && col.type !== "text" && isNaN(Number(String(v).replace(/[\s,]/g, "")))) {
+        bad.push(`第 ${i + 1} 行「${labelText(col.label || col.key)}」`);
+      }
+    }));
+    const extra = (res.notes || []).join("；");
+    if (bad.length) {
+      toast(`已导入 ${rows.length} 行，但有 ${bad.length} 格不是数字（如 ${bad.slice(0, 2).join("、")}）${extra ? "；" + extra : ""}`, true);
+    } else {
+      toast(`已导入 ${rows.length} 行 × ${rows[0].length} 列${extra ? "（" + extra + "）" : ""}，${res.name || ""}`);
+    }
     scheduleRun();
   };
 }
 
 function updateCount(card, t) {
   const c = card.querySelector(".table-count");
-  if (c) c.textContent = `${S.data.tables[t.key].length} 行 · 可直接粘贴 Excel 区域`;
+  if (c) c.textContent = `${S.data.tables[t.key].length} 行 · 可粘贴 / 复制 Excel 区域`;
 }
 
 /* ---------------- 原始资料 ---------------- */
@@ -617,11 +669,13 @@ function renderResult(res) {
     const card = document.createElement("div");
     card.className = "card";
     card.innerHTML = `<div class="card-head"><h3>${rich(t.title || "结果")}</h3>
-        <span class="sub">${(t.rows || []).length} 行</span></div>
+        <span class="acts"><span class="sub">${(t.rows || []).length} 行</span><button class="link-btn" data-copy-result title="整张结果表复制到剪贴板，可直接粘贴到 Excel">复制</button></span></div>
       <div class="result-wrap"><table class="result">
         <thead><tr>${(t.columns || []).map(c => `<th>${rich(c)}</th>`).join("")}</tr></thead>
         <tbody>${(t.rows || []).map(row => `<tr>${row.map(v => `<td>${typeof v === "number" ? esc(fmtNum(v, 6)) : rich(v)}</td>`).join("")}</tr>`).join("")}</tbody>
       </table></div>`;
+    card.querySelector("[data-copy-result]").onclick = () => copyTable(
+      (t.columns || []).map(labelText), t.rows || [], t.title || "结果表");
     tbox.appendChild(card);
   });
 

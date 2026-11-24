@@ -97,7 +97,18 @@ if (-not $Force) {
 }
 
 # ---------- 2. 下载便携版 Python（免安装、不需要管理员权限） ----------
-if (-not (Test-Path $pyExe)) {
+$pyReady = Test-Path $pyExe
+if ($pyReady) {
+    # 有 python.exe 也可能是解压中断留下的半截目录，先确认它跑得起来。
+    # 注意：Windows PowerShell 5.1 在 Stop 模式下会把原生命令的 stderr 当成终止错误，所以要 try 住
+    try {
+        & $pyExe -c "import sys" 2>$null
+        if ($LASTEXITCODE -ne 0) { $pyReady = $false }
+    } catch { $pyReady = $false }
+    if (-not $pyReady) { Note "已有 python.exe 但无法运行，重新解压一份。" }
+}
+
+if (-not $pyReady) {
     Step ("下载 Python " + $version + " 便携版（约 11 MB，只需一次）")
     $zip = Join-Path $runtime "python-embed.zip"
     $zipUrls = @(
@@ -132,26 +143,66 @@ if (-not (Test-Path $pyExe)) {
         Set-Content -Path $pth.FullName -Value $lines -Encoding ASCII
     }
     Ok ("Python 已就绪：" + $pyExe)
+} else {
+    Ok ("已存在便携 Python：" + $pyExe)
+}
 
-    Step "安装 pip"
-    $getpip = Join-Path $runtime "get-pip.py"
+# ---------- 3. 安装 pip ----------
+# get-pip.py 必须放在 runtime\python\ 里，和 python.exe 同目录并在该目录下运行：
+# 便携版的库搜索路径由 python312._pth 固定在 exe 旁边，放错目录会装不上 pip。
+# 这一步不放在「是否新下载 Python」分支里，否则 python 在、pip 坏了时重跑脚本会直接跳过。
+Step "检查 pip"
+# 用文件判断，不调 python：5.1 下 `python -m pip --version` 失败时会往 stderr 写一行，
+# 被重定向后变成终止错误，脚本会直接崩在探测这一步。
+$pipDir = Join-Path $pyDir "Lib\site-packages\pip"
+$pipOk = Test-Path (Join-Path $pipDir "__init__.py")
+if ($pipOk) {
+    Ok "pip 已就绪"
+} else {
+    Step "安装 pip（只需一次）"
+    $getpip = Join-Path $pyDir "get-pip.py"
+    # 旧版本把 get-pip.py 错放在 runtime\ 里，顺手清理掉
+    Remove-Item (Join-Path $runtime "get-pip.py") -Force -ErrorAction SilentlyContinue
     $pipUrls = @(
         "https://bootstrap.pypa.io/get-pip.py",
         "https://mirrors.aliyun.com/pypi/get-pip.py"
     )
-    $okPip = $false
+    $gotPip = $false
     foreach ($u in $pipUrls) {
-        if (Get-File $u $getpip 100000) { $okPip = $true; break }
+        Note ("下载：" + $u)
+        if (Get-File $u $getpip 100000) { $gotPip = $true; break }
+        Note "该地址不可用，换下一个。"
     }
-    if (-not $okPip) { Fail "pip 安装包下载失败，请检查网络。"; exit 1 }
-    & $pyExe $getpip --no-warn-script-location -i https://pypi.tuna.tsinghua.edu.cn/simple
+    if (-not $gotPip) {
+        Fail "pip 安装包下载失败，请检查网络。"
+        exit 1
+    }
+
+    $pipIndexes = @(
+        "https://pypi.tuna.tsinghua.edu.cn/simple",
+        "https://mirrors.aliyun.com/pypi/simple",
+        "https://pypi.org/simple"
+    )
+    foreach ($idx in $pipIndexes) {
+        Push-Location $pyDir
+        & $pyExe "get-pip.py" --no-warn-script-location -i $idx
+        $code = $LASTEXITCODE
+        Pop-Location
+        if ($code -eq 0) { break }
+        Note "这个镜像没装上，换下一个。"
+    }
+
+    if (-not (Test-Path (Join-Path $pipDir "__init__.py"))) {
+        Fail "pip 没装上。请手动执行下面两行（get-pip.py 就在该目录里）："
+        Write-Host ("  cd /d " + $pyDir) -ForegroundColor Yellow
+        Write-Host "  python.exe get-pip.py" -ForegroundColor Yellow
+        exit 1
+    }
     Remove-Item $getpip -Force -ErrorAction SilentlyContinue
     Ok "pip 就绪"
-} else {
-    Ok "已存在便携 Python"
 }
 
-# ---------- 3. 安装依赖库 ----------
+# ---------- 4. 安装依赖库 ----------
 Step "安装计算所需的库（numpy / pandas / scipy / flask / openpyxl，约 60 MB）"
 $indexes = @(
     "https://pypi.tuna.tsinghua.edu.cn/simple",
@@ -172,18 +223,33 @@ if (-not $ok) {
 }
 Ok "依赖安装完成"
 
-# ---------- 4. 自检 ----------
+# ---------- 5. 自检 ----------
 Step "自检"
 Push-Location $root
-& $pyExe -c "import flask, numpy, pandas, scipy, openpyxl" *> (Join-Path $runtime "import.log")
-if ($LASTEXITCODE -ne 0) {
+# 这两步都把输出写文件；5.1 下 stderr 被重定向时会变成终止错误，所以统一 try 住按退出码判断
+$impLog = Join-Path $runtime "import.log"
+$impCode = 0
+try {
+    & $pyExe -c "import flask, numpy, pandas, scipy, openpyxl" *> $impLog
+    $impCode = $LASTEXITCODE
+} catch {
+    $impCode = 1
+    try { $_ | Out-String | Add-Content -Path $impLog -Encoding UTF8 } catch {}
+}
+if ($impCode -ne 0) {
     Pop-Location
-    Fail ("依赖导入失败，详见 " + (Join-Path $runtime "import.log"))
+    Fail ("依赖导入失败，详见 " + $impLog)
     exit 1
 }
 $stamp = Join-Path $runtime "selftest.log"
-& $pyExe -m app.selftest *> $stamp
-$code = $LASTEXITCODE
+$code = 0
+try {
+    & $pyExe -m app.selftest *> $stamp
+    $code = $LASTEXITCODE
+} catch {
+    $code = 1
+    try { $_ | Out-String | Add-Content -Path $stamp -Encoding UTF8 } catch {}
+}
 Pop-Location
 if ($code -ne 0) {
     Fail ("自检未通过，详见 " + $stamp)
